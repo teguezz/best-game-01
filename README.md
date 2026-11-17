@@ -7,6 +7,12 @@ them to level up and choose one of three **blessings** each level, building the 
 night demands. Three times a night the dark sends **UMBRA**, a boss wisp big enough to blot
 out the trees, and it brings friends.
 
+The night also **turns** as it deepens, four times: embers rain from the sky in a
+**Cinderfall** (1:10), the swarm **surges** in a ring (2:52), a **Frost Gust** chills every
+foe for five long seconds (4:48), and from 6:42 **the dark doubles** its pressure until
+dawn. And after the first hundred seconds, something with amber eyes starts creeping
+through the black toward your light.
+
 An original game in plain JavaScript and canvas 2D — no libraries, no build step, no network.
 All sound and music are synthesised live with WebAudio.
 
@@ -15,6 +21,7 @@ All sound and music are synthesised live with WebAudio.
 | Input | Action |
 | --- | --- |
 | WASD / arrow keys | Move the keeper |
+| Shift / Space | Dash — a burst of speed in the move direction; nothing can bite you mid-dash (2.2 s cooldown) |
 | Mouse | Aim — the lantern auto-casts ember bolts at the nearest foe |
 | Hold mouse button | Focus fire: bolts hunt the foe nearest your cursor instead |
 | 1 / 2 / 3 or click a card | Choose a blessing on level-up |
@@ -31,6 +38,8 @@ weakens, so a dim garden is a warning, not a mood.
 - **Shard** — a splinter of a husk; faster and meaner than it looks.
 - **Cinder Husk** — a slow cracked shell that splits into two shards when it breaks.
 - **Dartmoth** — stalks, pauses, flashes, then dashes in a straight burning line.
+- **Lurker** — nearly invisible in the dark: two amber eyes creep closer, crouch at the
+  edge of the light with a grin, then lunge faster than you can walk. Dash, or be bitten.
 - **Shadow-Wisp** — a big patient ghost; soaks up embers and bites hard.
 - **UMBRA, THE SNUFFING DARK** — the boss, returning deeper at 1:55, 3:55 and 5:55, spawning
   moths as it comes. Felling it pays a shower of cinders.
@@ -38,6 +47,7 @@ weakens, so a dim garden is a warning, not a mood.
 ## Blessings
 
 Kindled Edge (damage), Quick Hands (cast speed), Twin Ember (+1 bolt per volley, ×4),
+Piercing Embers (bolts fly through +1 foe, ×3),
 Swift Boots (move speed), Cinder Charm (magnet), Stout Flame (max flame + mend), Orbit Spark
 (a spark that circles and bites, ×4), Spark Fury (spark damage), Frost Aura (a slowing ring),
 Gilded Cinders (XP), Banked Coals (mend now). Most stack; the cards say exactly what they do.
@@ -65,10 +75,14 @@ One clear job per file, all of it hand-written for this game:
 - `game/src/input.js` — keyboard and mouse state: held keys, press edges, the aim point.
 - `game/src/audio.js` — the WebAudio sound kit: synthesised effects and a gentle pentatonic
   night pattern on a lookahead scheduler. No audio files.
-- `game/src/upgrades.js` — the eleven blessings: what they do, their caps, the 1-of-3 roll.
-- `game/src/world.js` — the simulation: keeper, flame, swarm AI (flutter, dash, split,
-  boss), bolts, orbiting sparks, frost, cinders, particles, waves and scoring. Fixed-step,
-  DOM-free, and it queues sound triggers for the shell to play.
+- `game/src/upgrades.js` — the twelve blessings: what they do, their caps, the 1-of-3 roll.
+- `game/src/events.js` — the night's four scripted turns (Cinderfall, the Swarm Surges, a
+  Frost Gust, the Dark Doubles): when each fires, what it does, and the spawn/speed
+  multipliers the world consults while one holds.
+- `game/src/world.js` — the simulation: keeper (with a dash), flame, swarm AI (flutter,
+  dash, split, the lurker's stalk-crouch-lunge, boss), piercing bolts, orbiting sparks,
+  frost, cinders, particles, waves and scoring. Fixed-step, DOM-free, and it queues sound
+  triggers for the shell to play.
 - `game/src/render.js` — all drawing: the seeded garden, the darkness that closes as the
   flame fades, the creatures, the HUD, and every screen (title, blessing choice, pause,
   game over, dawn). Blessing icons are drawn from paths, never emoji.
