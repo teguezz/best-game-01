@@ -9,12 +9,16 @@ export class Input {
     this.toLogical = toLogical;
     this.held = new Set();
     this.edges = [];
+    this.dashQueued = false;
     this.mouse = { x: 640, y: 300, down: false, clicked: false };
 
     window.addEventListener('keydown', (event) => {
       if (event.repeat) return;
       this.held.add(event.code);
       this.edges.push(event.code);
+      if (event.code === 'ShiftLeft' || event.code === 'ShiftRight' || event.code === 'Space') {
+        this.dashQueued = true;
+      }
       if (event.code.startsWith('Arrow')) event.preventDefault();
     });
     window.addEventListener('keyup', (event) => {
@@ -22,6 +26,7 @@ export class Input {
     });
     window.addEventListener('blur', () => {
       this.held.clear();
+      this.dashQueued = false;
       this.mouse.down = false;
     });
     canvas.addEventListener('pointermove', (event) => {
@@ -57,6 +62,13 @@ export class Input {
   /** Take the oldest queued key press edge, or null when none is waiting. */
   takeEdge() {
     return this.edges.length > 0 ? this.edges.shift() : null;
+  }
+
+  /** Consume the dash request (Shift or Space pressed since the last step), once per press. */
+  takeDash() {
+    const was = this.dashQueued;
+    this.dashQueued = false;
+    return was;
   }
 
   /** Whether a key is currently held down. */

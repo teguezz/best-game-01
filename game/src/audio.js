@@ -87,6 +87,8 @@ export class SoundKit {
   dawn() { [392, 523, 659, 784, 1046].forEach((freq, i) => this.tone({ freq, type: 'sine', dur: 0.3, vol: 0.09, delay: i * 0.11 })); }
   over() { [330, 262, 196, 147].forEach((freq, i) => this.tone({ freq, type: 'triangle', dur: 0.3, vol: 0.1, delay: i * 0.16 })); }
   choose() { this.tone({ freq: 660, slide: 120, type: 'triangle', dur: 0.1, vol: 0.08 }); }
+  dash() { this.noise({ dur: 0.16, vol: 0.07, freq: 2400 }); this.tone({ freq: 340, slide: 420, type: 'sine', dur: 0.14, vol: 0.05 }); }
+  gust() { this.noise({ dur: 0.7, vol: 0.1, freq: 700 }); this.tone({ freq: 880, slide: -300, type: 'sine', dur: 0.5, vol: 0.04 }); }
 
   /** Start the gentle night pattern; it schedules itself a few notes ahead. */
   startMusic() {

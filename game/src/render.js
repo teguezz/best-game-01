@@ -243,6 +243,45 @@ function drawFoe(ctx, foe) {
     ctx.beginPath();
     ctx.arc(0, 0, foe.r * 0.26 + Math.sin(foe.age * 5) * 1.2, 0, TAU);
     ctx.fill();
+  } else if (foe.kind === 'lurker') {
+    // A lurker is mostly darkness wearing a shape: a low body, pointed ears, and two
+    // amber eyes that widen the moment it springs. In the dark it is a rumour with teeth.
+    const crouch = foe.state === 'crouch';
+    const lunge = foe.state === 'lunge';
+    ctx.fillStyle = '#191233';
+    ctx.beginPath();
+    ctx.ellipse(0, foe.r * 0.18, foe.r * 1.08, foe.r * (crouch ? 0.6 : 0.8), 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(157, 143, 199, 0.4)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * foe.r * 0.62, -foe.r * 0.4);
+      ctx.lineTo(side * foe.r * 0.98, -foe.r * 1.05);
+      ctx.lineTo(side * foe.r * 0.24, -foe.r * 0.6);
+      ctx.closePath();
+      ctx.fill();
+    }
+    const eyeR = foe.r * (lunge ? 0.21 : 0.14);
+    ctx.save();
+    ctx.shadowColor = '#ffb02e';
+    ctx.shadowBlur = 8 + (crouch ? 6 : 0);
+    ctx.fillStyle = '#ffb02e';
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(side * foe.r * 0.34, -foe.r * 0.12, eyeR, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+    if (crouch) {
+      // The grin gives it away — half a second before the lunge does.
+      ctx.strokeStyle = 'rgba(243, 234, 210, 0.8)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(0, foe.r * 0.22, foe.r * 0.36, Math.PI * 0.15, Math.PI * 0.85);
+      ctx.stroke();
+    }
   } else {
     // Wisp and boss: a ghost with a wavy skirt and a hollow stare.
     const boss = foe.kind === 'boss';
@@ -308,6 +347,17 @@ function drawFoe(ctx, foe) {
 function drawKeeper(ctx, world) {
   const p = world.p;
   shadow(ctx, p.x, p.y + 15, 15, 5);
+  // A dashing keeper leaves a comet of after-images.
+  if (p.dashT > 0) {
+    for (let i = 3; i >= 1; i -= 1) {
+      ctx.globalAlpha = 0.1 + 0.05 * (3 - i);
+      ctx.fillStyle = '#ff8a3d';
+      ctx.beginPath();
+      ctx.arc(p.x - p.dashX * i * 14, p.y - p.dashY * i * 14, 12 - i * 2, 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
   // Frost aura ring.
   if (world.stats.frostRadius > 0) {
     ctx.strokeStyle = 'rgba(159, 216, 255, 0.4)';
@@ -484,6 +534,13 @@ function drawHud(ctx, world, view) {
   ctx.font = '700 12px system-ui, sans-serif';
   ctx.fillText(`${Math.ceil(world.stats.flame)} / ${world.stats.maxFlame}`, 30, 48);
 
+  // Dash readiness, a slim teal bar under the flame: full means the keeper can burst.
+  ctx.fillStyle = COLORS.textDim;
+  ctx.font = '700 10px system-ui, sans-serif';
+  ctx.fillText('DASH', 22, 68);
+  const dashF = 1 - Math.max(0, world.p.dashCd) / PLAYER.dashCooldown;
+  bar(ctx, 58, 60, 96, 8, dashF, dashF >= 1 ? '#57e6c9' : 'rgba(87, 230, 201, 0.55)');
+
   // Night progress, top centre: the road from dusk to dawn.
   ctx.textAlign = 'center';
   ctx.fillStyle = COLORS.textDim;
@@ -534,7 +591,7 @@ function drawHud(ctx, world, view) {
   ctx.textAlign = 'right';
   ctx.font = '600 11px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(168, 158, 131, 0.8)';
-  ctx.fillText(view.muted ? 'M — sound: OFF' : 'WASD move · hold mouse: focus fire · P pause · M sound', W - 16, H - 26);
+  ctx.fillText(view.muted ? 'M — sound: OFF' : 'WASD move · SHIFT dash · hold mouse: focus fire · P pause · M sound', W - 16, H - 26);
 
   // Wave banner.
   if (world.banner.t > 0) {
@@ -569,9 +626,9 @@ function drawTitle(ctx, world, view) {
   ctx.fillText('Moths and shadow-wisps are coming to snuff it. Hold the flame until dawn.', W / 2, 286);
   ctx.font = '600 16px system-ui, sans-serif';
   ctx.fillStyle = COLORS.textDim;
-  ctx.fillText('MOVE  WASD / arrows        AIM  mouse — hold to focus fire        PAUSE  P        SOUND  M', W / 2, 348);
+  ctx.fillText('MOVE  WASD / arrows        DASH  Shift / Space        AIM  mouse — hold to focus fire        PAUSE  P        SOUND  M', W / 2, 348);
   ctx.fillText('Gather cinders from the fallen to grow stronger. Choose a blessing each level.', W / 2, 376);
-  ctx.fillText('Survive the full night — 8 minutes — and dawn is yours.', W / 2, 404);
+  ctx.fillText('The night turns as it deepens: cinderfall, frost gusts — and amber eyes in the dark.', W / 2, 404);
 
   const rect = beginButtonRect();
   const hover = pointInRect(view.mouse.x, view.mouse.y, rect);
@@ -726,6 +783,32 @@ function drawBlessingIcon(ctx, id, cx, cy, s) {
       else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
     }
     ctx.closePath();
+    ctx.fill();
+  } else if (id === 'pierce') {
+    // One bolt, two rings: through and through.
+    ctx.strokeStyle = '#9d8fc7';
+    ctx.lineWidth = 2.6;
+    for (const dx of [-s * 0.5, s * 0.42]) {
+      ctx.beginPath();
+      ctx.arc(dx, 0, s * 0.34, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#ffd76a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.95, 0);
+    ctx.lineTo(s * 0.78, 0);
+    ctx.stroke();
+    ctx.fillStyle = '#ffd76a';
+    ctx.beginPath();
+    ctx.moveTo(s, 0);
+    ctx.lineTo(s * 0.6, -s * 0.24);
+    ctx.lineTo(s * 0.6, s * 0.24);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ff8a3d';
+    ctx.beginPath();
+    ctx.arc(-s * 0.95, 0, s * 0.17, 0, TAU);
     ctx.fill();
   } else {
     // coals: a mending heart.

@@ -87,6 +87,43 @@ function runProbe() {
   for (let i = 0; i < 40 && !world.boss; i += 1) world.step(STEP, pilotMove(world), aimFree);
   check('the boss arrives on schedule', world.boss !== null);
 
+  // The dash: a burst of speed in the move direction that then cools down.
+  const dasher = new World(createRandom(3));
+  dasher.startRun();
+  const dashX0 = dasher.p.x;
+  for (let i = 0; i < 14; i += 1) dasher.step(STEP, { x: 1, y: 0, dash: i === 0 }, aimFree);
+  const walker = new World(createRandom(3));
+  walker.startRun();
+  for (let i = 0; i < 14; i += 1) walker.step(STEP, { x: 1, y: 0 }, aimFree);
+  check('a dash bursts forward, then cools down', dasher.p.x - dashX0 > (walker.p.x - dashX0) * 1.5 && dasher.p.dashCd > 0);
+
+  // The lurker: it stalks in, crouches at the edge of the light, and lunges.
+  const lurked = new World(createRandom(11));
+  lurked.startRun();
+  const lurker = lurked.spawnFoe('lurker', lurked.p.x + 210, lurked.p.y);
+  let lungeSpeed = 0;
+  for (let i = 0; i < 60 * 4 && !lurked.finished; i += 1) {
+    lurked.step(STEP, { x: 0, y: 0 }, aimFree);
+    lungeSpeed = Math.max(lungeSpeed, Math.hypot(lurker.vx, lurker.vy));
+  }
+  check('the lurker lunges from the dark', lungeSpeed > 400);
+
+  // The night's turns fire on their marks.
+  const turned = new World(createRandom(13));
+  turned.startRun();
+  turned.time = 69.9;
+  for (let i = 0; i < 40; i += 1) turned.step(STEP, pilotMove(turned), aimFree);
+  check('cinderfall turns the night at its mark', turned.events.fired.has('cinderfall'));
+
+  // Piercing embers fly through the first foe and bite the second in line.
+  const pierced = new World(createRandom(17));
+  pierced.startRun();
+  pierced.stats.pierce = 1;
+  pierced.spawnFoe('moth', pierced.p.x + 60, pierced.p.y);
+  pierced.spawnFoe('moth', pierced.p.x + 130, pierced.p.y);
+  for (let i = 0; i < 90 && pierced.kills < 2; i += 1) pierced.step(STEP, { x: 0, y: 0 }, aimFree);
+  check('piercing bolts pass through foes', pierced.kills >= 2);
+
   const doomed = new World(createRandom(5));
   doomed.startRun();
   doomed.stats.flame = 6;
@@ -170,6 +207,8 @@ function playGame() {
     bossdie: () => sound.bossDie(),
     dawn: () => sound.dawn(),
     over: () => sound.over(),
+    dash: () => sound.dash(),
+    gust: () => sound.gust(),
     choose: () => sound.choose(),
   };
 
@@ -304,7 +343,9 @@ function playGame() {
       steps += 1;
       if (screen === SCREEN_PLAY) {
         const aim = { x: input.mouse.x, y: input.mouse.y, focus: input.mouse.down };
-        handleEvents(world.step(STEP, input.moveVector(), aim));
+        const move = input.moveVector();
+        move.dash = input.takeDash();
+        handleEvents(world.step(STEP, move, aim));
         drainFx();
         if (screen !== SCREEN_PLAY) break;
       } else if (screen === SCREEN_TITLE) {

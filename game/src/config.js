@@ -23,6 +23,9 @@ export const PLAYER = {
   collectRadius: 24,
   sparkRadius: 56,
   sparkDamage: 9,
+  dashBoost: 3.1,
+  dashTime: 0.22,
+  dashCooldown: 2.2,
 };
 
 /** Boss arrival times (seconds into the night) and the wave-banner minute marks. */
@@ -46,6 +49,7 @@ export const FOES = {
   shard: { hp: 2, speed: 158, radius: 7, damage: 4, xp: 1, score: 5 },
   husk: { hp: 13, speed: 58, radius: 16, damage: 10, xp: 2, score: 25 },
   dart: { hp: 8, speed: 96, radius: 12, damage: 9, xp: 2, score: 30 },
+  lurker: { hp: 16, speed: 74, radius: 13, damage: 12, xp: 3, score: 40 },
   wisp: { hp: 30, speed: 41, radius: 24, damage: 14, xp: 4, score: 50 },
   boss: { hp: 300, speed: 33, radius: 46, damage: 22, xp: 30, score: 500 },
 };

@@ -6,6 +6,7 @@
 
 import { BOSS_NAMES, BOSS_TIMES, FIELD, FOES, NIGHT_SECONDS, PLAYER, SPAWN, WAVE_SECONDS } from './config.js';
 import { applyBlessing, rollChoices } from './upgrades.js';
+import { NightEvents } from './events.js';
 
 export const EVENT_LEVELUP = 1;
 export const EVENT_OVER = 2;
@@ -36,13 +37,14 @@ export class World {
     this.level = 1;
     this.xp = 0;
     this.xpNext = xpForLevel(1);
-    this.p = { x: FIELD.width / 2, y: FIELD.height / 2, radius: PLAYER.radius, hurtT: 0, faceX: 1, faceY: 0 };
+    this.p = { x: FIELD.width / 2, y: FIELD.height / 2, radius: PLAYER.radius, hurtT: 0, faceX: 1, faceY: 0, dashT: 0, dashCd: 0, dashX: 1, dashY: 0 };
     this.stats = {
       flame: PLAYER.maxFlame,
       maxFlame: PLAYER.maxFlame,
       damage: PLAYER.startDamage,
       fireInterval: PLAYER.startFireInterval,
       bolts: PLAYER.startBolts,
+      pierce: 0,
       speed: PLAYER.speed,
       magnet: PLAYER.startMagnet,
       xpGain: 1,
@@ -63,6 +65,7 @@ export class World {
     this.sparkAngle = 0;
     this.boss = null;
     this.bossesSpawned = 0;
+    this.events = new NightEvents();
     this.pendingChoices = null;
     this.lastWave = 0;
     this.banner = { text: '', t: 0, max: 1 };
@@ -128,6 +131,7 @@ export class World {
     const weights = [['moth', 10]];
     if (t > 35) weights.push(['husk', 3.4]);
     if (t > 80) weights.push(['dart', 2.8]);
+    if (t > 100) weights.push(['lurker', 2.2]);
     if (t > 130) weights.push(['wisp', 2.4]);
     let total = 0;
     for (const [, w] of weights) total += w;
@@ -202,7 +206,7 @@ export class World {
     foe.dead = true;
     this.kills += 1;
     this.score += foe.scoreValue;
-    const colors = { moth: '#cfc4e8', shard: '#e8b07a', husk: '#d98a4a', dart: '#e85d75', wisp: '#57e6c9', boss: '#8a6cff' };
+    const colors = { moth: '#cfc4e8', shard: '#e8b07a', husk: '#d98a4a', dart: '#e85d75', lurker: '#ffb02e', wisp: '#57e6c9', boss: '#8a6cff' };
     this.burst(foe.x, foe.y, foe.kind === 'boss' ? 60 : 10, colors[foe.kind] ?? '#ffffff', foe.kind === 'boss' ? 260 : 150);
     this.dropCinders(foe.x, foe.y, foe.xpValue);
     if (foe.kind === 'husk') {
@@ -309,6 +313,7 @@ export class World {
       return EVENT_DAWN;
     }
 
+    this.events.step(this);
     this.stepPlayer(dt, move);
     events |= this.stepCasting(dt, aim);
     this.stepSpawning(dt);
@@ -341,11 +346,39 @@ export class World {
 
   stepPlayer(dt, move) {
     const s = this.stats;
-    this.p.x = Math.min(FIELD.width - this.p.radius, Math.max(this.p.radius, this.p.x + move.x * s.speed * dt));
-    this.p.y = Math.min(FIELD.height - this.p.radius, Math.max(this.p.radius, this.p.y + move.y * s.speed * dt));
+    const p = this.p;
+    // The dash: a short burst in the move direction, on a cooldown, untouchable while it
+    // lasts — the keeper's one answer to being cornered.
+    if (p.dashCd > 0) p.dashCd -= dt;
+    if (p.dashT > 0) p.dashT -= dt;
+    if (move.dash && p.dashCd <= 0 && (move.x !== 0 || move.y !== 0)) {
+      p.dashT = PLAYER.dashTime;
+      p.dashCd = PLAYER.dashCooldown;
+      p.dashX = move.x;
+      p.dashY = move.y;
+      this.fx.push('dash');
+    }
+    const dashing = p.dashT > 0;
+    const dirX = dashing ? p.dashX : move.x;
+    const dirY = dashing ? p.dashY : move.y;
+    const speed = s.speed * (dashing ? PLAYER.dashBoost : 1);
+    p.x = Math.min(FIELD.width - p.radius, Math.max(p.radius, p.x + dirX * speed * dt));
+    p.y = Math.min(FIELD.height - p.radius, Math.max(p.radius, p.y + dirY * speed * dt));
     if (move.x !== 0 || move.y !== 0) {
-      this.p.faceX = move.x;
-      this.p.faceY = move.y;
+      p.faceX = move.x;
+      p.faceY = move.y;
+    }
+    if (dashing) {
+      // A dashing keeper sheds a comet of embers.
+      for (let i = 0; i < 2; i += 1) {
+        this.particles.push({
+          x: p.x - p.dashX * 10 + this.random.range(-5, 5), y: p.y - p.dashY * 10 + this.random.range(-5, 5),
+          vx: -p.dashX * 60 + this.random.range(-20, 20), vy: -p.dashY * 60 + this.random.range(-20, 20),
+          life: this.random.range(0.25, 0.45), max: 0.45, size: this.random.range(2, 3.8),
+          color: '#ffb347', drag: 1.4,
+        });
+      }
+      return;
     }
     // The lantern sheds a slow trail of embers as the keeper moves.
     if ((move.x !== 0 || move.y !== 0) && this.random.chance(0.35)) {
@@ -390,7 +423,7 @@ export class World {
         const at = this.edgePoint();
         this.spawnFoe(this.pickKind(), at.x, at.y);
       }
-      this.spawnTimer += this.spawnInterval() * this.random.range(0.75, 1.25);
+      this.spawnTimer += this.spawnInterval() * this.events.spawnFactor(this) * this.random.range(0.75, 1.25);
     }
     const wave = Math.floor(this.time / WAVE_SECONDS);
     if (wave > this.lastWave) {
@@ -419,6 +452,7 @@ export class World {
 
   stepEnemies(dt) {
     const p = this.p;
+    const chill = this.events.chillFactor(this);
     for (const foe of this.enemies) {
       foe.age += dt;
       if (foe.flashT > 0) foe.flashT -= dt;
@@ -456,6 +490,31 @@ export class World {
           vy = Math.sin(toPlayer) * foe.speed * 0.3;
           if (foe.stateT <= 0) foe.state = 'stalk';
         }
+      } else if (foe.kind === 'lurker') {
+        // It creeps through the dark, crouches as it nears the light, then lunges.
+        foe.stateT -= dt;
+        const reach = distance(p.x, p.y, foe.x, foe.y);
+        if (foe.state === 'stalk') {
+          vx = Math.cos(toPlayer) * foe.speed;
+          vy = Math.sin(toPlayer) * foe.speed;
+          if (reach < 240) { foe.state = 'crouch'; foe.stateT = 0.5; }
+        } else if (foe.state === 'crouch') {
+          vx = Math.cos(toPlayer) * foe.speed * 0.15;
+          vy = Math.sin(toPlayer) * foe.speed * 0.15;
+          if (foe.stateT <= 0) {
+            foe.state = 'lunge';
+            foe.stateT = 0.38;
+            foe.dashX = Math.cos(toPlayer);
+            foe.dashY = Math.sin(toPlayer);
+          }
+        } else if (foe.state === 'lunge') {
+          vx = foe.dashX * 520;
+          vy = foe.dashY * 520;
+          if (foe.stateT <= 0) foe.state = 'stalk';
+        } else {
+          vx = Math.cos(toPlayer) * foe.speed * 0.4;
+          vy = Math.sin(toPlayer) * foe.speed * 0.4;
+        }
       } else {
         // husk, wisp and the boss simply advance, inexorable.
         vx = Math.cos(toPlayer) * foe.speed;
@@ -468,8 +527,8 @@ export class World {
           }
         }
       }
-      foe.vx = vx * factor;
-      foe.vy = vy * factor;
+      foe.vx = vx * factor * chill;
+      foe.vy = vy * factor * chill;
       foe.x += foe.vx * dt;
       foe.y += foe.vy * dt;
       foe.x = Math.min(FIELD.width - 6, Math.max(6, foe.x));
@@ -495,9 +554,10 @@ export class World {
         }
       }
     }
-    // Contact: whatever reaches the lantern bites at the flame.
+    // Contact: whatever reaches the lantern bites at the flame — but a dashing keeper is
+    // already gone, and the dark bites only air.
     for (const foe of this.enemies) {
-      if (this.p.hurtT <= 0 && distance(p.x, p.y, foe.x, foe.y) < foe.r + p.radius - 2) {
+      if (this.p.hurtT <= 0 && this.p.dashT <= 0 && distance(p.x, p.y, foe.x, foe.y) < foe.r + p.radius - 2) {
         this.stats.flame -= foe.dmg * this.difficultyDamage();
         this.p.hurtT = PLAYER.hurtCooldown;
         this.shake = Math.max(this.shake, 6);
@@ -520,10 +580,16 @@ export class World {
       bolt.life -= dt;
       if (bolt.life <= 0) continue;
       for (const foe of this.enemies) {
-        if (!foe.dead && distance(bolt.x, bolt.y, foe.x, foe.y) < foe.r + 5) {
-          bolt.life = 0;
+        if (foe.dead) continue;
+        if (bolt.hit && bolt.hit.has(foe)) continue;
+        if (distance(bolt.x, bolt.y, foe.x, foe.y) < foe.r + 5) {
+          // A piercing bolt flies through and bites the next foe too; an ordinary one
+          // spends itself on the first body it meets.
+          if (!bolt.hit) bolt.hit = new Set();
+          bolt.hit.add(foe);
           this.burst(bolt.x, bolt.y, 3, '#ffd76a', 90);
           this.damageFoe(foe, bolt.dmg);
+          if (bolt.hit.size > this.stats.pierce) bolt.life = 0;
           break;
         }
       }

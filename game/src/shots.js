@@ -49,7 +49,7 @@ export function pilotMove(world) {
 }
 
 /** Blessing picks for an autopilot keeper: raw killing power first, survival second. */
-const PILOT_PRIORITY = ['twin', 'edge', 'hands', 'spark', 'stout', 'frost', 'fury', 'boots', 'charm', 'greed', 'coals'];
+const PILOT_PRIORITY = ['twin', 'pierce', 'edge', 'hands', 'spark', 'stout', 'frost', 'fury', 'boots', 'charm', 'greed', 'coals'];
 
 /** If the world is holding level-up choices open, take the autopilot's favourite. */
 export function autoChoose(world) {
@@ -68,7 +68,13 @@ export function autoChoose(world) {
 
 function runSteps(world, steps, pilot = true, choose = false) {
   for (let i = 0; i < steps; i += 1) {
-    world.step(STEP, pilot ? pilotMove(world) : { x: 0, y: 0 }, AIM_FREE);
+    const mv = pilot ? pilotMove(world) : { x: 0, y: 0 };
+    // A pressed autopilot dashes out of trouble, like a player would.
+    if (pilot && world.p.dashCd <= 0 && (mv.x !== 0 || mv.y !== 0)) {
+      const pressed = world.enemies.some((foe) => distance(world.p.x, world.p.y, foe.x, foe.y) < 80);
+      if (pressed) mv.dash = true;
+    }
+    world.step(STEP, mv, AIM_FREE);
     if (choose) autoChoose(world);
     if (world.finished) break;
   }
@@ -90,8 +96,12 @@ export function stageShot(name, world, seed) {
     if (world.boss) {
       const p = world.p;
       const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-      world.boss.x = clamp(p.x + 300, 90, FIELD.width - 90);
-      world.boss.y = clamp(p.y - 60, 90, FIELD.height - 90);
+      // Centre the keeper for the portrait, so the boss and its retinue share the frame
+      // instead of crowding whichever edge the fight happened to reach.
+      p.x = 520;
+      p.y = 415;
+      world.boss.x = clamp(p.x + 320, 90, FIELD.width - 90);
+      world.boss.y = clamp(p.y - 70, 90, FIELD.height - 90);
       const retinue = ['wisp', 'moth', 'moth', 'husk', 'dart', 'moth', 'wisp'];
       retinue.forEach((kind, i) => {
         const angle = (i / retinue.length) * Math.PI * 2 + 0.45;
@@ -99,6 +109,12 @@ export function stageShot(name, world, seed) {
         world.spawnFoe(kind, clamp(p.x + Math.cos(angle) * ring, 24, FIELD.width - 24), clamp(p.y + Math.sin(angle) * ring, 24, FIELD.height - 24));
       });
       world.dropCinders(p.x + 120, p.y + 95, 8);
+      // Dress the keeper for the portrait: orbiting sparks and a frost ring make the
+      // light feel defended, and a lurker waits at the edge of it, all eyes.
+      world.stats.sparkCount = Math.max(world.stats.sparkCount, 2);
+      if (world.stats.frostRadius <= 0) { world.stats.frostRadius = 132; world.stats.frostSlow = 0.3; }
+      world.spawnFoe('lurker', clamp(p.x - 320, 24, FIELD.width - 24), clamp(p.y + 165, 24, FIELD.height - 24));
+      world.dropCinders(p.x - 140, p.y - 80, 6);
       runSteps(world, 42, true, true);
     }
     return SCREEN_PLAY;
